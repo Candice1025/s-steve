@@ -1,0 +1,127 @@
+# Gradle
+.gradle/
+build/
+
+# IDE
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+
+# Minecraft
+run/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+logs/
+
+# Temporary files
+*.tmp
+*.temp
+
+# Environment variables
+.env
+*.env
+
+# API keys and secrets
+api_keys.json
+secrets.json
+
+# Java
+*.class
+*.jar
+*.war
+*.nar
+*.ear
+*.zip
+*.tar.gz
+*.rar
+
+# Gradle wrapper
+!gradle/wrapper/gradle-wrapper.jar
+!gradle/wrapper/gradle-wrapper.properties
+
+# Git
+.git/
+
+# Windows
+Thumbs.db
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Linux
+*~
+
+# Build output
+build/
+out/
+
+# IDEA
+.idea/
+*.iml
+*.ipr
+*.iws
+
+# VS Code
+.vscode/
+
+# NetBeans
+nbproject/
+
+# Eclipse
+.classpath
+.project
+.settings/
+
+# IntelliJ
+out/
+.idea/
+*.iml
+*.iws
+*.ipr
+
+# Gradle
+.gradle/
+build/
+
+# Maven
+target/
+
+# Ant
+build.xml
+
+# Java
+*.class
+*.jar
+*.war
+*.nar
+*.ear
+*.zip
+*.tar.gz
+*.rar
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Logs
+logs/
+
+# Temporary files
+*.tmp
+*.temp
+
+# Environment variables
+.env
+*.env
+
+# API keys and secrets
+api_keys.json
+secrets.json
