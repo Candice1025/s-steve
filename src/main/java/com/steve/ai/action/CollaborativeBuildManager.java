@@ -189,17 +189,20 @@ public class CollaborativeBuildManager {
      */
     public static BlockPlacement getNextBlock(CollaborativeBuild build, String steveName) {
         if (build.isComplete()) {
+            SteveMod.LOGGER.info("getNextBlock: build '{}' already complete (called by {})", build.structureId, steveName);
             return null;
         }
-        
+
         build.participatingSteves.add(steveName);
-        
-        // Assign Steve to a section if not already assigned
+
+        SteveMod.LOGGER.debug("getNextBlock called by '{}' - participatingSteves={} steveToSectionMap={} sections={}", 
+            steveName, build.participatingSteves.size(), build.steveToSectionMap, build.sections.size());
+
         Integer sectionIndex = build.steveToSectionMap.get(steveName);
         if (sectionIndex == null) {
             sectionIndex = assignSteveToSection(build, steveName);
             if (sectionIndex == null) {
-                // No sections available
+                SteveMod.LOGGER.info("getNextBlock: no available section for '{}' on build {}", steveName, build.structureId);
                 return null;
             }
         }
@@ -208,11 +211,24 @@ public class CollaborativeBuildManager {
         BlockPlacement block = section.getNextBlock();
         
         if (block == null) {
+            SteveMod.LOGGER.info("Steve '{}' completed their section ({}). Attempting reassignment...", steveName, section.sectionName);
+            build.steveToSectionMap.remove(steveName);
+            sectionIndex = assignSteveToSection(build, steveName);
+
             if (sectionIndex != null) {
                 section = build.sections.get(sectionIndex);
                 block = section.getNextBlock();
-                if (block != null) {                }
+                if (block != null) {
+                    SteveMod.LOGGER.info("Steve '{}' reassigned to {} quadrant to help complete the build", 
+                        steveName, section.sectionName);
+                } else {
+                    SteveMod.LOGGER.debug("After reassignment, no immediate block available for '{}' (section {}).", steveName, section.sectionName);
+                }
+            } else {
+                SteveMod.LOGGER.debug("No sections available to reassign '{}' on build {}", steveName, build.structureId);
             }
+        } else {
+            SteveMod.LOGGER.debug("Allocating block {} in section {} for Steve '{}'", block.pos, section.sectionName, steveName);
         }
         
         return block;
@@ -289,6 +305,13 @@ public class CollaborativeBuildManager {
      */
     public static void cleanupCompletedBuilds() {
         activeBuilds.entrySet().removeIf(entry -> entry.getValue().isComplete());
+    }
+
+    /**
+     * Get all active builds (read-only view)
+     */
+    public static Collection<CollaborativeBuild> getActiveBuilds() {
+        return Collections.unmodifiableCollection(activeBuilds.values());
     }
 }
 

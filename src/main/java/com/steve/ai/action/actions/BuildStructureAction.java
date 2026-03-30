@@ -40,7 +40,7 @@ public class BuildStructureAction extends BaseAction {
     private int ticksRunning;
     private CollaborativeBuildManager.CollaborativeBuild collaborativeBuild; // For multi-Steve collaboration
     private boolean isCollaborative;
-    private static final int MAX_TICKS = 120000;
+    private static final int MAX_TICKS = 1000000;
     private static final int BLOCKS_PER_TICK = 1;
     private static final double BUILD_SPEED_MULTIPLIER = 1.5;
 
@@ -50,7 +50,7 @@ public class BuildStructureAction extends BaseAction {
 
     @Override
     protected void onStart() {
-        structureType = task.getStringParameter("structure").toLowerCase();
+        structureType = task.getStringParameter("structure", "ots_full").toLowerCase();
         currentBlockIndex = 0;
         ticksRunning = 0;
         
@@ -178,6 +178,23 @@ public class BuildStructureAction extends BaseAction {
         }
         
         SteveMod.LOGGER.info("✅ Build plan generated with {} blocks", buildPlan.size());
+
+        // Apply global scaling if requested (default: shrink to 1/10)
+        Object scaleParam = task.getParameter("scale");
+        double scaleFactor = 0.1; // default to 1/10
+        if (scaleParam instanceof Number) {
+            scaleFactor = ((Number) scaleParam).doubleValue();
+        } else if (scaleParam instanceof String) {
+            try {
+                scaleFactor = Double.parseDouble((String) scaleParam);
+            } catch (NumberFormatException ignored) {}
+        }
+
+        if (scaleFactor > 0 && scaleFactor < 1.0) {
+            SteveMod.LOGGER.info("Scaling build plan by factor {} (shrinking)", scaleFactor);
+            buildPlan = scaleBuildPlan(buildPlan, clearPos, scaleFactor);
+            SteveMod.LOGGER.info("Scaled build plan now has {} blocks", buildPlan.size());
+        }
         
         StructureRegistry.register(clearPos, width, height, depth, structureType);
         
@@ -204,6 +221,34 @@ public class BuildStructureAction extends BaseAction {
         
         SteveMod.LOGGER.info("Steve '{}' starting COLLABORATIVE build of {} at {} with {} blocks using materials: {} [FLYING ENABLED]", 
             steve.getSteveName(), structureType, clearPos, buildPlan.size(), buildMaterials);
+    }
+
+    /**
+     * Scale a build plan relative to an origin position.
+     * This reduces coordinates by the given linear factor and deduplicates overlapping positions.
+     */
+    private List<BlockPlacement> scaleBuildPlan(List<BlockPlacement> original, BlockPos origin, double scale) {
+        java.util.Map<BlockPos, Block> map = new java.util.LinkedHashMap<>();
+
+        for (BlockPlacement bp : original) {
+            int dx = bp.pos.getX() - origin.getX();
+            int dy = bp.pos.getY() - origin.getY();
+            int dz = bp.pos.getZ() - origin.getZ();
+
+            int ndx = (int) Math.round(dx * scale);
+            int ndy = (int) Math.round(dy * scale);
+            int ndz = (int) Math.round(dz * scale);
+
+            BlockPos np = origin.offset(ndx, ndy, ndz);
+            // Later placements override earlier ones at the same position
+            map.put(np, bp.block);
+        }
+
+        List<BlockPlacement> scaled = new ArrayList<>();
+        for (java.util.Map.Entry<BlockPos, Block> e : map.entrySet()) {
+            scaled.add(new BlockPlacement(e.getKey(), e.getValue()));
+        }
+        return scaled;
     }
     
     /**
@@ -241,6 +286,7 @@ public class BuildStructureAction extends BaseAction {
         }
         
         if (isCollaborative) {
+            SteveMod.LOGGER.debug("BuildStructureAction.onTick: Steve '{}' in collaborative mode for '{}', ticksRunning={}", steve.getSteveName(), structureType, ticksRunning);
             // 尝试重新获取collaborativeBuild（如果为null）
             if (collaborativeBuild == null) {
                 SteveMod.LOGGER.info("Steve '{}' lost collaborative build reference, trying to find nearby builds...", steve.getSteveName());
@@ -311,6 +357,8 @@ public class BuildStructureAction extends BaseAction {
                     CollaborativeBuildManager.getNextBlock(collaborativeBuild, steve.getSteveName());
                 
                 if (placement == null) {
+                    SteveMod.LOGGER.debug("Steve '{}' getNextBlock returned null (build={} participants={} progress={}%)", 
+                        steve.getSteveName(), collaborativeBuild.structureId, collaborativeBuild.participatingSteves.size(), collaborativeBuild.getProgressPercentage());
                     if (ticksRunning % 20 == 0) {
                         SteveMod.LOGGER.info("Steve '{}' has no more blocks! Build {}% complete", 
                             steve.getSteveName(), collaborativeBuild.getProgressPercentage());
@@ -1289,12 +1337,105 @@ public class BuildStructureAction extends BaseAction {
             return null;
         }
         
+        int minY = Integer.MAX_VALUE;
+        int maxY = Integer.MIN_VALUE;
+        for (var templateBlock : template.blocks) {
+            int y = templateBlock.relativePos.getY();
+            if (y < minY) minY = y;
+            if (y > maxY) maxY = y;
+        }
+        
+        int structureHeight = maxY - minY + 1;
+        SteveMod.LOGGER.info("Structure '{}' bounds: Y={} to {} (height={})", structureName, minY, maxY, structureHeight);
+        
+        int bottomSolidBlocks = 0;
+        int topSolidBlocks = 0;
+        int bottomAirOrGlass = 0;
+        int topAirOrGlass = 0;
+        
+        for (var templateBlock : template.blocks) {
+            int y = templateBlock.relativePos.getY();
+            Block block = templateBlock.blockState.getBlock();
+            boolean isSolid = !block.defaultBlockState().isAir() && 
+                              block != Blocks.GLASS && 
+                              block != Blocks.GLASS_PANE &&
+                              block != Blocks.LIGHT &&
+                              block != Blocks.AIR;
+            
+            boolean isFloorOrCeiling = block == Blocks.GRASS_BLOCK || 
+                                       block == Blocks.DIRT || 
+                                       block == Blocks.STONE ||
+                                       block == Blocks.COBBLESTONE || 
+                                       block == Blocks.OAK_PLANKS || 
+                                       block == Blocks.SMOOTH_STONE ||
+                                       block == Blocks.POLISHED_ANDESITE || 
+                                       block == Blocks.BEDROCK ||
+                                       block == Blocks.SAND ||
+                                       block == Blocks.GRAVEL;
+            
+            if (y == minY) {
+                if (isFloorOrCeiling) {
+                    bottomSolidBlocks += 5;
+                } else if (isSolid) {
+                    bottomSolidBlocks++;
+                } else {
+                    bottomAirOrGlass++;
+                }
+            }
+            
+            if (y == maxY) {
+                if (isFloorOrCeiling) {
+                    topSolidBlocks += 5;
+                } else if (isSolid) {
+                    topSolidBlocks++;
+                } else {
+                    topAirOrGlass++;
+                }
+            }
+        }
+        
+        boolean needsFlip = false;
+        
+        if (topSolidBlocks > bottomSolidBlocks && bottomAirOrGlass > topAirOrGlass) {
+            needsFlip = true;
+            SteveMod.LOGGER.info("⚠️ Structure '{}' appears to be UPSIDE DOWN! Top has {} solid blocks, bottom has {}. Will flip.", 
+                structureName, topSolidBlocks, bottomSolidBlocks);
+        } else if (bottomSolidBlocks > topSolidBlocks) {
+            SteveMod.LOGGER.info("✅ Structure '{}' is correctly oriented (bottom has {} solid blocks, top has {})", 
+                structureName, bottomSolidBlocks, topSolidBlocks);
+        } else {
+            SteveMod.LOGGER.info("Structure '{}' orientation unclear, assuming correct (bottom: {}/{}, top: {}/{})", 
+                structureName, bottomSolidBlocks, bottomAirOrGlass, topSolidBlocks, topAirOrGlass);
+        }
+        
         List<BlockPlacement> blocks = new ArrayList<>();
         for (var templateBlock : template.blocks) {
-            BlockPos worldPos = startPos.offset(templateBlock.relativePos);
+            int originalY = templateBlock.relativePos.getY();
+            int adjustedY;
+            
+            if (needsFlip) {
+                adjustedY = (maxY - originalY);
+            } else {
+                if (minY < 0) {
+                    adjustedY = originalY - minY;
+                } else {
+                    adjustedY = originalY;
+                }
+            }
+            
+            BlockPos adjustedPos = new BlockPos(
+                templateBlock.relativePos.getX(),
+                adjustedY,
+                templateBlock.relativePos.getZ()
+            );
+            
+            BlockPos worldPos = startPos.offset(adjustedPos);
             Block block = templateBlock.blockState.getBlock();
             blocks.add(new BlockPlacement(worldPos, block));
         }
+        
+        SteveMod.LOGGER.info("Structure '{}' loaded with {} blocks, bottom at Y=0 (flipped: {})", 
+            structureName, blocks.size(), needsFlip);
         
         return blocks;
     }

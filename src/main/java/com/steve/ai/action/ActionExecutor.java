@@ -7,7 +7,9 @@ import com.steve.ai.ai.TaskPlanner;
 import com.steve.ai.config.SteveConfig;
 import com.steve.ai.entity.SteveEntity;
 
+import java.util.HashMap;
 import java.util.LinkedList;
+import java.util.Map;
 import java.util.Queue;
 
 public class ActionExecutor {
@@ -48,6 +50,13 @@ public class ActionExecutor {
             idleFollowAction = null;
         }
         
+        String lowerCommand = command.toLowerCase().trim();
+        
+        if (lowerCommand.contains("build") || lowerCommand.contains("建造") || lowerCommand.contains("盖房")) {
+            directBuildCommand(command);
+            return;
+        }
+        
         try {
             ResponseParser.ParsedResponse response = getTaskPlanner().planTasks(steve, command);
             
@@ -84,6 +93,27 @@ public class ActionExecutor {
         }
         
         SteveMod.LOGGER.info("Steve '{}' queued {} tasks", steve.getSteveName(), taskQueue.size());
+    }
+    
+    private void directBuildCommand(String command) {
+        SteveMod.LOGGER.info("🏗️ Steve '{}' executing direct build command: {}", steve.getSteveName(), command);
+        
+        currentGoal = "Build structure";
+        steve.getMemory().setCurrentGoal(currentGoal);
+        
+        taskQueue.clear();
+        
+        Map<String, Object> buildParams = new HashMap<>();
+        buildParams.put("structure", "ots_full");
+        
+        Task buildTask = new Task("build", buildParams);
+        taskQueue.add(buildTask);
+        
+        SteveMod.LOGGER.info("📋 Steve '{}' queued direct build task with ots_full structure", steve.getSteveName());
+        
+        if (SteveConfig.ENABLE_CHAT_RESPONSES.get()) {
+            sendToGUI(steve.getSteveName(), "Okay! I'll build the structure now!");
+        }
     }
     
     /**

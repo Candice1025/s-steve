@@ -31,6 +31,9 @@ public class SteveCommands {
                 .then(Commands.argument("name", StringArgumentType.string())
                     .then(Commands.argument("command", StringArgumentType.greedyString())
                         .executes(SteveCommands::tellSteve))))
+            .then(Commands.literal("tellall")
+                .then(Commands.argument("command", StringArgumentType.greedyString())
+                    .executes(SteveCommands::tellAllSteves)))
         );
     }
 
@@ -119,9 +122,6 @@ public class SteveCommands {
         SteveEntity steve = manager.getSteve(name);
         
         if (steve != null) {
-            // Disabled command feedback message
-            // source.sendSuccess(() -> Component.literal("Instructing " + name + ": " + command), true);
-            
             new Thread(() -> {
                 steve.getActionExecutor().processNaturalLanguageCommand(command);
             }).start();
@@ -132,5 +132,27 @@ public class SteveCommands {
             return 0;
         }
     }
+    
+    private static int tellAllSteves(CommandContext<CommandSourceStack> context) {
+        String command = StringArgumentType.getString(context, "command");
+        CommandSourceStack source = context.getSource();
+        
+        SteveManager manager = SteveMod.getSteveManager();
+        var steves = manager.getAllSteves();
+        
+        if (steves.isEmpty()) {
+            source.sendFailure(Component.literal("No active Steves to command"));
+            return 0;
+        }
+        
+        final int count = steves.size();
+        for (SteveEntity steve : steves) {
+            new Thread(() -> {
+                steve.getActionExecutor().processNaturalLanguageCommand(command);
+            }).start();
+        }
+        
+        source.sendSuccess(() -> Component.literal("Instructing " + count + " Steves: " + command), true);
+        return 1;
+    }
 }
-
